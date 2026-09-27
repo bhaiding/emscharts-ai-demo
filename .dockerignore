@@ -1,0 +1,12 @@
+.git
+.github
+.env*
+.openai
+.vinext
+.wrangler
+node_modules
+dist
+out
+outputs
+work
+npm-debug.log*
