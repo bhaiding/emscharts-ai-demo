@@ -20,7 +20,7 @@ The Render free service may take several seconds to wake up after a period of in
 - Infers medical versus trauma classification when supported by the complaint or mechanism.
 - Identifies required information that is still missing and generates follow-up questions.
 - Rewrites the patient care narrative for clarity while instructing the model not to invent unsupported facts.
-- Includes disabled voice-recording and note-image controls as visual placeholders for future transcription workflows.
+- Uploads JPEG, PNG, WebP, or GIF note images for AI transcription directly into Run Notes. Voice recording remains a disabled visual placeholder for a future workflow.
 
 ### Interactive ePCR chart
 
