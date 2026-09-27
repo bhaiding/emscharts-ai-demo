@@ -109,11 +109,11 @@ async function openAIResponse({ instructions, input, name, schema }) {
   return JSON.parse(outputText);
 }
 
-async function readJson(req) {
+async function readJson(req, maxBytes = 200_000) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 200_000) throw new Error('Request is too large.');
+    if (body.length > maxBytes) throw new Error('Request is too large.');
   }
   return JSON.parse(body || '{}');
 }
@@ -171,6 +171,33 @@ const server = createServer(async (req, res) => {
         input: `Source notes:\n${String(sourceText || '')}\n\nVerified chart values:\n${JSON.stringify(chart || {})}`,
         name: 'ems_narrative_rewrite',
         schema: narrativeSchema,
+      });
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'POST' && req.url === '/api/transcribe-note') {
+      if (!allowAIRequest(req)) return sendJson(res, 429, { error: 'Demo AI request limit reached. Please try again later.' });
+      const { imageDataUrl } = await readJson(req, 12_000_000);
+      if (typeof imageDataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(imageDataUrl)) {
+        return sendJson(res, 400, { error: 'Upload a JPEG, PNG, WebP, or GIF image.' });
+      }
+      if (imageDataUrl.length > 11_000_000) return sendJson(res, 413, { error: 'The image must be 8 MB or smaller.' });
+      const result = await openAIResponse({
+        instructions: `You transcribe images of handwritten or printed EMS notes. Return a faithful plain-text transcription of only the text that is visibly present. Preserve clinically meaningful abbreviations, numbers, times, medication names, and line order where practical. Do not infer missing words or add patient facts. Use [unclear] for text that cannot be read. If no note text is visible, return an empty transcription.`,
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Transcribe all readable note text in this image for inclusion in rough EMS run notes.' },
+            { type: 'input_image', image_url: imageDataUrl, detail: 'high' },
+          ],
+        }],
+        name: 'ems_note_image_transcription',
+        schema: {
+          type: 'object',
+          properties: { transcription: { type: 'string' } },
+          required: ['transcription'],
+          additionalProperties: false,
+        },
       });
       return sendJson(res, 200, result);
     }
