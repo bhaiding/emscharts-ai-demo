@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ems-ai-demo
+    runtime: node
+    plan: free
+    startCommand: node server.mjs
+    healthCheckPath: /ems-ai-assistant.html
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: MAX_REQUESTS_PER_HOUR
+        value: "20"
