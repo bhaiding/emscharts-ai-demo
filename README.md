@@ -1,13 +1,41 @@
 # EMS AI Chart Demo
 
-A browser-based EMS patient care record prototype with an AI-assisted intake workflow. It is a demonstration product and is not intended for real patient documentation or production clinical use.
+An interactive prototype that explores how AI could assist EMS clinicians with electronic patient care record (ePCR) documentation. Rough run notes are converted into structured chart fields, missing required information is identified, and the narrative is rewritten into clearer chronological documentation.
 
-## Demo pages
+This project is a demonstration only. It is not a certified ePCR, medical device, or production clinical system.
 
-- `/ems-ai-assistant.html` — AI intake, structured extraction, follow-up questions, and narrative rewriting
-- `/ems-chart.html` — interactive ePCR chart, CAD demo import, live completion tracking, and submission demo
+## Live demos
 
-The two pages share chart data through browser local storage. The AI page calls a small server-side OpenAI proxy so the API key never appears in browser code.
+- **[AI Intake Assistant](https://ems-ai-demo.onrender.com/ems-ai-assistant.html)** — enter rough call notes, extract chartable facts with OpenAI, answer follow-up questions, and generate a clearer narrative.
+- **[Patient Care Record](https://ems-ai-demo.onrender.com/ems-chart.html)** — review or edit the full chart, import sample CAD calls, monitor completion, and simulate chart submission.
+
+The Render free service may take several seconds to wake up after a period of inactivity.
+
+## What the prototype demonstrates
+
+### AI-assisted intake
+
+- Extracts demographics, incident details, chief complaint, history, disposition, destination, operational times, and crew information from free text.
+- Recognizes explicit negatives such as “no known allergies” and “takes no medications.”
+- Infers medical versus trauma classification when supported by the complaint or mechanism.
+- Identifies required information that is still missing and generates follow-up questions.
+- Rewrites the patient care narrative for clarity while instructing the model not to invent unsupported facts.
+- Includes disabled voice-recording and note-image controls as visual placeholders for future transcription workflows.
+
+### Interactive ePCR chart
+
+- Provides patient, assessment, history, narrative, incident, destination, time, and crew sections.
+- Synchronizes with the AI intake page through browser local storage.
+- Updates section counts and overall chart completion as information is added or cleared.
+- Imports two fictional CAD records using Notre Dame-area demo addresses.
+- Enables submission only after all required fields are complete.
+- Displays a simulated successful upload message naming the receiving hospital.
+
+## How it works
+
+The two browser pages share chart data using `localStorage`. The AI page sends notes to a small Node.js server, which calls the OpenAI Responses API using structured JSON output. The OpenAI API key remains on the server and is never included in client-side code.
+
+The public demo includes a basic per-IP request limit. A production implementation would also require authentication, durable rate limiting, audit logging, access controls, encryption policies, clinical validation, and organization-specific ePCR integrations.
 
 ## Run locally
 
@@ -17,32 +45,27 @@ Use Node.js 22 or newer:
 OPENAI_API_KEY=your_key_here node server.mjs
 ```
 
-Then open `http://127.0.0.1:8765`.
+Then open:
 
-## Deploy on Render
+- `http://127.0.0.1:8765/ems-ai-assistant.html`
+- `http://127.0.0.1:8765/ems-chart.html`
+
+## Deploy your own copy
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/bhaiding/emscharts-ai-demo)
 
-1. Create a new Blueprint in Render and select this repository.
-2. Render will detect `render.yaml`.
-3. Add `OPENAI_API_KEY` as a secret environment variable.
-4. Deploy the service.
+The included `render.yaml` creates the web service and prompts for `OPENAI_API_KEY` as a secret environment variable.
 
-The public AI and chart URLs will be:
-
-- `https://YOUR-SERVICE.onrender.com/ems-ai-assistant.html`
-- `https://YOUR-SERVICE.onrender.com/ems-chart.html`
-
-## Run with Docker
+Docker is also supported:
 
 ```bash
 docker build -t ems-ai-demo .
 docker run --rm -p 8765:8765 -e OPENAI_API_KEY=your_key_here ems-ai-demo
 ```
 
-## Security and clinical notice
+## Clinical and privacy notice
 
-- Never commit an OpenAI API key or place it in client-side JavaScript.
-- The demo includes a basic per-IP AI request limit. A real public product should add authentication, durable rate limiting, logging controls, and abuse monitoring.
-- Do not enter protected health information or real patient data into this demo.
-- All AI-generated documentation must be reviewed by a qualified clinician.
+- Do not enter real patient information or protected health information into this public demo.
+- AI-generated documentation can contain mistakes and must be reviewed by a qualified clinician.
+- This prototype is not intended for patient care, billing, compliance, or official medical-record use.
+- Never commit an OpenAI API key or place it in browser JavaScript.
