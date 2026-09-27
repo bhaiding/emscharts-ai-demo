@@ -21,6 +21,8 @@ Then open `http://127.0.0.1:8765`.
 
 ## Deploy on Render
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/bhaiding/emscharts-ai-demo)
+
 1. Create a new Blueprint in Render and select this repository.
 2. Render will detect `render.yaml`.
 3. Add `OPENAI_API_KEY` as a secret environment variable.
