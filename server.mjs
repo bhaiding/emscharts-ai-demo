@@ -177,11 +177,11 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && req.url === '/api/transcribe-note') {
       if (!allowAIRequest(req)) return sendJson(res, 429, { error: 'Demo AI request limit reached. Please try again later.' });
-      const { imageDataUrl } = await readJson(req, 12_000_000);
+      const { imageDataUrl } = await readJson(req, 28_100_000);
       if (typeof imageDataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(imageDataUrl)) {
         return sendJson(res, 400, { error: 'Upload a JPEG, PNG, WebP, or GIF image.' });
       }
-      if (imageDataUrl.length > 11_000_000) return sendJson(res, 413, { error: 'The image must be 8 MB or smaller.' });
+      if (imageDataUrl.length > 28_000_000) return sendJson(res, 413, { error: 'The image must be 20 MB or smaller.' });
       const result = await openAIResponse({
         instructions: `You transcribe images of handwritten or printed EMS notes. Return a faithful plain-text transcription of only the text that is visibly present. Preserve clinically meaningful abbreviations, numbers, times, medication names, and line order where practical. Do not infer missing words or add patient facts. Use [unclear] for text that cannot be read. If no note text is visible, return an empty transcription.`,
         input: [{
