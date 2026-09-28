@@ -78,6 +78,7 @@
     const empty=document.querySelector('#emptyState'),loading=document.querySelector('#loadingState'),results=document.querySelector('#resultsState');
     const schema=[
       {key:'name',label:'Patient name',section:'Patient',required:true},{key:'age',label:'Age',section:'Patient',required:true},{key:'sex',label:'Sex',section:'Patient',required:true},
+      {key:'patientAddress',label:'Patient address',section:'Patient',required:false},{key:'patientCity',label:'Patient city',section:'Patient',required:false},{key:'patientState',label:'Patient state',section:'Patient',required:false},{key:'patientZip',label:'Patient ZIP',section:'Patient',required:false},
       {key:'address',label:'Scene address',section:'Incident',required:true},{key:'city',label:'Scene city',section:'Incident',required:true},{key:'unit',label:'Medic unit',section:'Incident',required:true},
       {key:'complaint',label:'Chief complaint',section:'Assessment',required:true},{key:'onset',label:'Symptom onset',section:'Assessment',required:true},{key:'distress',label:'Level of distress',section:'Assessment',required:true},
       {key:'medicalTrauma',label:'Medical / trauma',section:'Assessment',required:true},{key:'allergies',label:'Allergies',section:'History',required:true},{key:'history',label:'Medical history',section:'History',required:false},
