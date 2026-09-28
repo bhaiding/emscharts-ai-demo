@@ -205,8 +205,8 @@
         const payload=await response.json();
         if(!response.ok)throw new Error(payload.error||'AI extraction failed.');
         const existing=JSON.parse(localStorage.getItem('emsChartData')||'{}');
-        const extracted=Object.fromEntries(Object.entries(payload.chart||{}).filter(([,value])=>String(value??'').trim()));
-        chart={...existing,...extracted};delete chart.submittedAt;
+        const payloadChart=payload.chart||{},extracted=Object.fromEntries(Object.entries(payloadChart).filter(([,value])=>String(value??'').trim()));
+        chart={...existing,...extracted,crew:String(payloadChart.crew||''),crewMembers:Array.isArray(payloadChart.crewMembers)?payloadChart.crewMembers:[]};delete chart.submittedAt;
         fieldMeta=Object.fromEntries((payload.evidence||[]).map(item=>[item.key,item]));
         modelQuestions=Object.fromEntries((payload.missingQuestions||[]).map(item=>[item.key,item.question]));
         missing=requiredFields(chart).filter(f=>!String(chart[f.key]||'').trim()).map(f=>f.key);
