@@ -16,6 +16,7 @@ The Render free service may take several seconds to wake up after a period of in
 ### AI-assisted intake
 
 - Extracts demographics, incident details, chief complaint, history, disposition, destination, operational times, and crew information from free text.
+- Normalizes common unit shorthand such as `M2`, `Amb 4`, and `unit #53`, and maps final outcomes to chart-compatible dispositions including transported, refused care, deceased, cancelled, and no patient found.
 - Recognizes explicit negatives such as “no known allergies” and “takes no medications.”
 - Infers medical versus trauma classification when supported by the complaint or mechanism.
 - Identifies required information that is still missing and generates follow-up questions.
