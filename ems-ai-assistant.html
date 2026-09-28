@@ -86,6 +86,8 @@
       {key:'dob',label:'Date of birth',section:'Patient',required:true},{key:'weight',label:'Weight',section:'Patient',required:false},{key:'medications',label:'Medications',section:'History',required:true},{key:'lastIntake',label:'Last oral intake',section:'History',required:false},
       {key:'careTransferTime',label:'Care transfer time',section:'Times',required:true},{key:'crew',label:'Crew members',section:'Crew',required:true},{key:'narrative',label:'Narrative',section:'Narrative',required:true}
     ];
+    const nonTransportFields=new Set(['destination','transportMode','condition','careTransferTime']);
+    const requiredFields=(data=chart)=>schema.filter(field=>field.required&&!(data.disposition&&data.disposition!=='Transported'&&nonTransportFields.has(field.key)));
     const questionConfig={
       dob:{question:'What is the patient’s date of birth?',type:'date'},weight:{question:'What is the patient’s approximate weight?',placeholder:'e.g. 82 kg'},medications:{question:'What medications does the patient take?',placeholder:'Enter medications or “none known”'},lastIntake:{question:'When and what did the patient last eat or drink?',placeholder:'e.g. Sandwich and water at 12:30'},careTransferTime:{question:'What time was care transferred at the destination?',type:'time'},crew:{question:'Who were the crew members and their roles?',placeholder:'e.g. B. Haidinger - primary care; A. Smith - driver'}
     };
@@ -206,7 +208,7 @@
         chart={...existing,...extracted};delete chart.submittedAt;
         fieldMeta=Object.fromEntries((payload.evidence||[]).map(item=>[item.key,item]));
         modelQuestions=Object.fromEntries((payload.missingQuestions||[]).map(item=>[item.key,item.question]));
-        missing=schema.filter(f=>f.required&&!String(chart[f.key]||'').trim()).map(f=>f.key);
+        missing=requiredFields(chart).filter(f=>!String(chart[f.key]||'').trim()).map(f=>f.key);
         persistChart();renderResults();loading.style.display='none';results.style.display='flex';showToast('Chart page updated by OpenAI.');
       }catch(error){loading.style.display='none';empty.style.display='grid';showToast(error.message||'Unable to analyze the notes.');}
     }
@@ -214,7 +216,7 @@
       const facts=schema.filter(f=>chart[f.key]&&f.key!=='narrative');
       document.querySelector('#foundCount').textContent=facts.length+1;
       document.querySelector('#missingCount').textContent=missing.length;
-      const requiredTotal=schema.filter(f=>f.required).length;
+      const requiredTotal=requiredFields(chart).length;
       const complete=Math.round(((requiredTotal-missing.length)/requiredTotal)*100);
       document.querySelector('#percent').textContent=complete+'%';document.querySelector('#progressBar').style.width=complete+'%';
       document.querySelector('#factList').innerHTML=facts.map(f=>{const meta=fieldMeta[f.key]||{};return `<div class="fact" title="${escapeHtml(meta.evidence)}"><span class="check">✓</span><span class="label">${escapeHtml(f.label)}</span><span class="value">${escapeHtml(chart[f.key])}</span><span class="confidence">${escapeHtml(meta.confidence||'Review')}</span></div>`}).join('');
@@ -224,8 +226,8 @@
     function updateAnswered(){const inputs=[...document.querySelectorAll('.question input')],answered=inputs.filter(i=>i.value.trim()).length;document.querySelector('#answeredCount').textContent=`${answered} of ${inputs.length} questions answered`;document.querySelector('#applyAnswers').disabled=answered<inputs.length;document.querySelector('#completeBanner').style.display=inputs.length&&answered===inputs.length?'block':'none'}
     async function applyAnswers(){
       document.querySelectorAll('.question input').forEach(i=>{if(i.value.trim())chart[i.dataset.key]=i.value.trim()});
-      missing=schema.filter(f=>f.required&&!String(chart[f.key]||'').trim()).map(f=>f.key);persistChart();
-      const requiredTotal=schema.filter(f=>f.required).length,complete=Math.round(((requiredTotal-missing.length)/requiredTotal)*100);document.querySelector('#missingCount').textContent=missing.length;document.querySelector('#percent').textContent=complete+'%';document.querySelector('#progressBar').style.width=complete+'%';
+      missing=requiredFields(chart).filter(f=>!String(chart[f.key]||'').trim()).map(f=>f.key);persistChart();
+      const requiredTotal=requiredFields(chart).length,complete=Math.round(((requiredTotal-missing.length)/requiredTotal)*100);document.querySelector('#missingCount').textContent=missing.length;document.querySelector('#percent').textContent=complete+'%';document.querySelector('#progressBar').style.width=complete+'%';
       const button=document.querySelector('#applyAnswers');button.disabled=true;button.textContent='Rewriting narrative…';
       try{const response=await fetch('/api/rewrite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceText:source.value,chart})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Narrative rewrite failed.');chart.narrative=payload.narrative;persistChart();showToast('Answers and narrative added to the chart.');openChartPage();}
       catch(error){showToast(error.message||'Answers saved, but narrative rewrite failed.');openChartPage()}
@@ -234,7 +236,7 @@
     function renderChart(){
       const groups=['Patient','Assessment','History','Incident','Destination','Times','Crew','Narrative'];
       const cards=groups.map(group=>{const fields=schema.filter(f=>f.section===group);if(!fields.length)return'';return `<section class="chart-card ${group==='Narrative'?'narrative-card':''}"><h2>${group}</h2><div class="chart-fields">${fields.map(f=>`<div class="chart-field ${!chart[f.key]?'missing':''} ${f.key==='narrative'?'wide':''}"><span>${f.label}</span><b>${chart[f.key]||'Missing'}</b></div>`).join('')}</div></section>`}).join('');
-      document.querySelector('#chartGrid').innerHTML=cards;document.querySelector('#chartPatient').textContent=chart.name||'Unnamed patient';const requiredTotal=schema.filter(f=>f.required).length,complete=Math.round(((requiredTotal-missing.length)/requiredTotal)*100);document.querySelector('#chartCompletion').textContent=complete+'%';
+      document.querySelector('#chartGrid').innerHTML=cards;document.querySelector('#chartPatient').textContent=chart.name||'Unnamed patient';const requiredTotal=requiredFields(chart).length,complete=Math.round(((requiredTotal-missing.length)/requiredTotal)*100);document.querySelector('#chartCompletion').textContent=complete+'%';
     }
     function showView(view){document.querySelector('#assistantView').style.display=view==='assistant'?'grid':'none';document.querySelector('#chartView').style.display=view==='chart'?'block':'none';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='chart')renderChart()}
     function showToast(message){const t=document.querySelector('#toast');t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
