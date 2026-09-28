@@ -10,12 +10,14 @@ const MAX_REQUESTS_PER_HOUR = Number(process.env.MAX_REQUESTS_PER_HOUR || 20);
 const requestWindows = new Map();
 
 const fieldKeys = [
-  'name', 'age', 'sex', 'dob', 'weight', 'address', 'city', 'unit',
+  'name', 'age', 'sex', 'dob', 'weight', 'patientAddress', 'patientCity',
+  'patientState', 'patientZip', 'address', 'city', 'unit',
   'complaint', 'onset', 'distress', 'medicalTrauma', 'allergies',
   'medications', 'history', 'lastIntake', 'alcoholDrugs', 'disposition',
   'destination', 'transportMode', 'condition', 'dispatchTime',
   'careTransferTime', 'crew', 'narrative',
 ];
+const optionalFieldKeys = new Set(['weight', 'patientAddress', 'patientCity', 'patientState', 'patientZip', 'history', 'lastIntake', 'alcoholDrugs']);
 
 const chartProperties = Object.fromEntries(fieldKeys.map((key) => [key, {
   type: 'string',
@@ -32,7 +34,12 @@ chartProperties.disposition = {
   enum: ['', 'Transported', 'Patient refused care', 'Treated and released', 'Cancelled', 'Deceased', 'No patient found', 'Transferred to another unit'],
   description: 'Final patient disposition. Normalize transported/conveyed/taken to a facility as Transported; refused or declined care/transport, AMA, or signed refusal as Patient refused care; treated and left at scene as Treated and released; cancelled/disregarded calls as Cancelled; pronounced dead or DOA as Deceased; no patient located as No patient found; and transport by another EMS unit as Transferred to another unit.',
 };
-chartProperties.city.description = 'Scene city derived from the scene location or address. Do not use the destination city.';
+chartProperties.patientAddress.description = 'Patient home, residence, or mailing street address from a demographics, patient information, residence, or home-address section. Do not put the incident location here unless the notes explicitly say the scene was the patient home.';
+chartProperties.patientCity.description = 'City belonging to the patient home/residence address. Do not use the scene or destination city unless explicitly identified as the patient residence.';
+chartProperties.patientState.description = 'State belonging to the patient home/residence address.';
+chartProperties.patientZip.description = 'ZIP/postal code belonging to the patient home/residence address.';
+chartProperties.address.description = 'Scene or incident street address only. Extract from scene, incident, dispatch, response-location, or location sections. An address appearing only in demographics or patient information is the patient address and this field must remain empty.';
+chartProperties.city.description = 'Scene city derived only from the scene/incident location or address. Do not use the patient residence city or destination city.';
 chartProperties.allergies.description = 'Reported allergies. Explicit negatives such as no allergies or NKDA must be returned as No known allergies.';
 chartProperties.medications.description = 'Reported medications. Explicit negatives such as takes no medications must be returned as No medications reported.';
 chartProperties.narrative.description = 'Newly synthesized chronological third-person EMS narrative using only supported facts; never copy rough source wording verbatim.';
@@ -83,6 +90,8 @@ Rules:
 - Preserve explicit negative findings as chartable values. Examples: "no allergies" becomes "No known allergies"; "takes no medications" becomes "No medications reported".
 - Infer medicalTrauma from the chief complaint and mechanism. Chest pain/pressure, dyspnea, syncope, abdominal pain, altered mental status, and other non-injury complaints must be Medical. Falls, collisions, lacerations, fractures, assaults, and other injury mechanisms must be Trauma. Use Medical and trauma when both are present. Use an empty string only when neither the complaint nor mechanism supports a classification.
 - Extract scene city from the location/address context, not from a destination hospital name.
+- Treat document section labels and nearby headings as evidence. An address in Demographics, Patient Information, Residence, Home Address, or Mailing Address belongs in patientAddress/patientCity/patientState/patientZip. An address in Scene, Incident, Dispatch, Response Location, or Call Location belongs in address/city. Never copy a demographics address into the scene fields. Populate both only when the notes explicitly establish that the incident occurred at the patient's residence.
+- Attempt every supported field, including optional fields. Optional does not mean ignore it: extract weight, patient residence information, medical history, last oral intake, and alcohol/drug information whenever supported. Leave an optional field empty when absent and never ask a follow-up question for it.
 - Always look for the responding or transporting EMS unit, including compact forms such as M2, Medic-2, Amb 4, A4, unit #53, Rescue 1, E3, and SQ5. Normalize these to readable names. Do not use an ED room, hospital unit, bed number, or crew member number as the EMS unit.
 - Always determine final disposition from the complete call outcome. Map transported/conveyed/taken to a facility to "Transported"; refused or declined care/transport, AMA, RMA, or signed refusal to "Patient refused care"; treated and released at scene to "Treated and released"; cancelled/disregarded to "Cancelled"; pronounced dead/DOA to "Deceased"; no patient found/unable to locate to "No patient found"; and transport by another EMS unit to "Transferred to another unit". A recommendation to transport is not proof that transport occurred.
 - Use empty strings for information that is not present and cannot be safely inferred.
@@ -90,7 +99,7 @@ Rules:
 - The narrative must always be newly synthesized as concise, chronological, third-person EMS documentation rather than copied verbatim. Use complete sentences, resolve fragments and repeated wording, and improve clinical clarity. Include only supported facts. Do not claim assessments, interventions, or responses that were not supplied. In context, "tx" may mean transport; never turn it into treatment unless an actual intervention is named.
 - Evidence should quote or closely paraphrase the shortest source phrase supporting each non-empty field. Mark inferred classifications medium confidence.
 - Ask one concise question for every missing field that is required to complete a typical patient care record. Do not ask for a field already resolved by an explicit negative statement. When disposition is not Transported, do not ask for destination, transport mode, condition at destination, or care-transfer time.
-- Weight and last oral intake are optional in this application. Extract them when present, but never include them in missingQuestions.`;
+- Optional fields in this application are weight, patient residence address/city/state/ZIP, medical history, last oral intake, and alcohol/drug information. Extract them when present, but never include them in missingQuestions.`;
 
 function normalizedUnit(type, identifier) {
   const labels = { medic: 'Medic', m: 'Medic', ambulance: 'Ambulance', amb: 'Ambulance', a: 'Ambulance', rescue: 'Rescue', r: 'Rescue', engine: 'Engine', e: 'Engine', squad: 'Squad', sq: 'Squad' };
@@ -129,9 +138,8 @@ function normalizeExtraction(result, sourceText) {
   if (sourceUnit) chart.unit = sourceUnit;
   const sourceDisposition = dispositionFromNotes(sourceText);
   if (sourceDisposition) chart.disposition = sourceDisposition;
-  if (chart.disposition && chart.disposition !== 'Transported') {
-    result.missingQuestions = (result.missingQuestions || []).filter(({ key }) => !['destination', 'transportMode', 'condition', 'careTransferTime'].includes(key));
-  }
+  result.missingQuestions = (result.missingQuestions || []).filter(({ key }) => !optionalFieldKeys.has(key));
+  if (chart.disposition && chart.disposition !== 'Transported') result.missingQuestions = result.missingQuestions.filter(({ key }) => !['destination', 'transportMode', 'condition', 'careTransferTime'].includes(key));
   result.chart = chart;
   return result;
 }
