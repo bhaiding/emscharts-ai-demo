@@ -101,7 +101,7 @@
       const file=event.target.files?.[0];if(!file)return;
       const allowed=['image/jpeg','image/png','image/webp','image/gif'],button=document.querySelector('#uploadNotes'),label=document.querySelector('#uploadLabel'),status=document.querySelector('#captureStatus');
       if(!allowed.includes(file.type)){status.textContent='Please choose a JPEG, PNG, WebP, or GIF image.';showToast(status.textContent);event.target.value='';return}
-      if(file.size>8*1024*1024){status.textContent='The image must be 8 MB or smaller.';showToast(status.textContent);event.target.value='';return}
+      if(file.size>20*1024*1024){status.textContent='The image must be 20 MB or smaller.';showToast(status.textContent);event.target.value='';return}
       button.disabled=true;button.classList.add('loading');label.textContent='Transcribing…';status.classList.remove('listening');status.textContent=`Reading ${file.name} with AI…`;
       try{
         const imageDataUrl=await fileToDataUrl(file),response=await fetch('/api/transcribe-note',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})}),payload=await response.json();
