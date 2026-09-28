@@ -26,6 +26,12 @@ chartProperties.medicalTrauma = {
   enum: ['', 'Medical', 'Trauma', 'Medical and trauma'],
   description: 'Required classification inferred from the chief complaint and mechanism. Chest pain, dyspnea, illness, syncope, and similar non-injury complaints are Medical. Falls, collisions, wounds, fractures, and other injuries are Trauma. Use Medical and trauma when both are present.',
 };
+chartProperties.unit.description = 'Responding or transporting EMS unit identifier. Extract common forms including Medic 2, Medic-2, M2, Ambulance 4, Amb 4, A4, Rescue 1, Engine 3, Squad 5, and unit #53. Normalize unambiguous abbreviations: M2 to Medic 2, Amb 4 or A4 to Ambulance 4, R1 to Rescue 1, E3 to Engine 3, and SQ5 to Squad 5. Do not confuse a room, bed, destination unit, or crew number with the EMS unit.';
+chartProperties.disposition = {
+  type: 'string',
+  enum: ['', 'Transported', 'Patient refused care', 'Treated and released', 'Cancelled', 'Deceased', 'No patient found', 'Transferred to another unit'],
+  description: 'Final patient disposition. Normalize transported/conveyed/taken to a facility as Transported; refused or declined care/transport, AMA, or signed refusal as Patient refused care; treated and left at scene as Treated and released; cancelled/disregarded calls as Cancelled; pronounced dead or DOA as Deceased; no patient located as No patient found; and transport by another EMS unit as Transferred to another unit.',
+};
 chartProperties.city.description = 'Scene city derived from the scene location or address. Do not use the destination city.';
 chartProperties.allergies.description = 'Reported allergies. Explicit negatives such as no allergies or NKDA must be returned as No known allergies.';
 chartProperties.medications.description = 'Reported medications. Explicit negatives such as takes no medications must be returned as No medications reported.';
@@ -77,12 +83,58 @@ Rules:
 - Preserve explicit negative findings as chartable values. Examples: "no allergies" becomes "No known allergies"; "takes no medications" becomes "No medications reported".
 - Infer medicalTrauma from the chief complaint and mechanism. Chest pain/pressure, dyspnea, syncope, abdominal pain, altered mental status, and other non-injury complaints must be Medical. Falls, collisions, lacerations, fractures, assaults, and other injury mechanisms must be Trauma. Use Medical and trauma when both are present. Use an empty string only when neither the complaint nor mechanism supports a classification.
 - Extract scene city from the location/address context, not from a destination hospital name.
+- Always look for the responding or transporting EMS unit, including compact forms such as M2, Medic-2, Amb 4, A4, unit #53, Rescue 1, E3, and SQ5. Normalize these to readable names. Do not use an ED room, hospital unit, bed number, or crew member number as the EMS unit.
+- Always determine final disposition from the complete call outcome. Map transported/conveyed/taken to a facility to "Transported"; refused or declined care/transport, AMA, RMA, or signed refusal to "Patient refused care"; treated and released at scene to "Treated and released"; cancelled/disregarded to "Cancelled"; pronounced dead/DOA to "Deceased"; no patient found/unable to locate to "No patient found"; and transport by another EMS unit to "Transferred to another unit". A recommendation to transport is not proof that transport occurred.
 - Use empty strings for information that is not present and cannot be safely inferred.
 - Times should be HH:MM when available. Dates should be YYYY-MM-DD when available.
 - The narrative must always be newly synthesized as concise, chronological, third-person EMS documentation rather than copied verbatim. Use complete sentences, resolve fragments and repeated wording, and improve clinical clarity. Include only supported facts. Do not claim assessments, interventions, or responses that were not supplied. In context, "tx" may mean transport; never turn it into treatment unless an actual intervention is named.
 - Evidence should quote or closely paraphrase the shortest source phrase supporting each non-empty field. Mark inferred classifications medium confidence.
-- Ask one concise question for every missing field that is required to complete a typical patient care record. Do not ask for a field already resolved by an explicit negative statement.
+- Ask one concise question for every missing field that is required to complete a typical patient care record. Do not ask for a field already resolved by an explicit negative statement. When disposition is not Transported, do not ask for destination, transport mode, condition at destination, or care-transfer time.
 - Weight and last oral intake are optional in this application. Extract them when present, but never include them in missingQuestions.`;
+
+function normalizedUnit(type, identifier) {
+  const labels = { medic: 'Medic', m: 'Medic', ambulance: 'Ambulance', amb: 'Ambulance', a: 'Ambulance', rescue: 'Rescue', r: 'Rescue', engine: 'Engine', e: 'Engine', squad: 'Squad', sq: 'Squad' };
+  return `${labels[type.toLowerCase()] || 'Unit'} ${identifier.toUpperCase()}`;
+}
+
+function unitFromNotes(text) {
+  const named = text.match(/\b(medic|ambulance|amb|rescue|engine|squad)\s*[-#:]?\s*([a-z]?\d+[a-z]?)\b/i);
+  if (named) return normalizedUnit(named[1], named[2]);
+  const numbered = text.match(/\bunit\s*(?:number|no\.?|#)?\s*[-#:]?\s*([a-z]?\d+[a-z]?)\b/i);
+  if (numbered) return `Unit ${numbered[1].toUpperCase()}`;
+  const compact = text.match(/\b(M|A|R|E|SQ)\s*[-#]?\s*(\d+[A-Z]?)\b/i);
+  return compact ? normalizedUnit(compact[1], compact[2]) : '';
+}
+
+function dispositionFromNotes(text) {
+  const rules = [
+    ['Deceased', /\b(?:pronounced (?:dead|deceased)|death pronounced|dead on arrival|d\.?(?:o\.?)?a\.?)\b/i],
+    ['Patient refused care', /\b(?:refus(?:ed|al)|declined (?:care|evaluation|transport)|signed (?:a )?refusal|against medical advice|a\.?(?:m\.?)?a\.?|r\.?(?:m\.?)?a\.?)\b/i],
+    ['Cancelled', /\b(?:call )?cancell?ed\b|\bdisregard(?:ed)?\b/i],
+    ['No patient found', /\b(?:no patient (?:found|located)|unable to locate (?:the )?patient|gone on arrival)\b/i],
+    ['Transferred to another unit', /\b(?:transported by|care transferred to)\s+(?:another|other|mutual aid)\s+(?:ems )?unit\b/i],
+    ['Treated and released', /\b(?:treated and released|released at scene|treated at scene and (?:left|released))\b/i],
+    ['Transported', /\b(?:patient (?:was )?)?(?:transported|conveyed)\b|\btaken to\s+(?:the\s+)?(?:hospital|medical center|trauma center|emergency department|ed)\b/i],
+  ];
+  const matches = rules.map(([value, pattern], priority) => {
+    const match = text.match(pattern);
+    return match ? { value, index: match.index, priority } : null;
+  }).filter(Boolean);
+  return matches.sort((a, b) => b.index - a.index || a.priority - b.priority)[0]?.value || '';
+}
+
+function normalizeExtraction(result, sourceText) {
+  const chart = result.chart || {};
+  const sourceUnit = unitFromNotes(sourceText);
+  if (sourceUnit) chart.unit = sourceUnit;
+  const sourceDisposition = dispositionFromNotes(sourceText);
+  if (sourceDisposition) chart.disposition = sourceDisposition;
+  if (chart.disposition && chart.disposition !== 'Transported') {
+    result.missingQuestions = (result.missingQuestions || []).filter(({ key }) => !['destination', 'transportMode', 'condition', 'careTransferTime'].includes(key));
+  }
+  result.chart = chart;
+  return result;
+}
 
 async function openAIResponse({ instructions, input, name, schema }) {
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not available to the local server.');
@@ -154,7 +206,7 @@ const server = createServer(async (req, res) => {
         name: 'ems_chart_extraction',
         schema: extractionSchema,
       });
-      return sendJson(res, 200, result);
+      return sendJson(res, 200, normalizeExtraction(result, text));
     }
 
     if (req.method === 'POST' && req.url === '/api/rewrite') {
