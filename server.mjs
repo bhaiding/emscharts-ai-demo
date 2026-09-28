@@ -60,7 +60,7 @@ chartProperties.crew.description = 'Readable crew summary. Keep members separate
 
 const crewMembersProperty = {
   type: 'array',
-  description: 'Every documented crew member as a separate array item. Never combine multiple people in one item.',
+  description: 'Every documented human crew member as a separate array item. Search the full narrative for actual names associated with care or crew roles. Never combine multiple people in one item and never treat a post, station, unit, apparatus, room, bed, or location identifier as a person.',
   items: {
     type: 'object',
     properties: {
@@ -122,7 +122,7 @@ Rules:
 - Extract scene city from the location/address context, not from a destination hospital name.
 - Treat document section labels and nearby headings as evidence. An address in Demographics, Patient Information, Residence, Home Address, or Mailing Address belongs in patientAddress/patientCity/patientState/patientZip. An address in Scene, Incident, Dispatch, Response Location, or Call Location belongs in address/city. Never copy a demographics address into the scene fields. Populate both only when the notes explicitly establish that the incident occurred at the patient's residence.
 - Attempt every supported field, including optional fields. Optional does not mean ignore it: extract weight, patient residence information, medical history, last oral intake, and alcohol/drug information whenever supported. Leave an optional field empty when absent and never ask a follow-up question for it.
-- Return each crew member separately in crewMembers. Use role descriptions to select Primary care, Driver, Attendant, or Observer. Examples: "Jones attended/was lead medic" means Primary care; "Smith drove/operator" means Driver; "Brown rode in back/assisted with care" means Attendant; "student Lee/ride-along" means Observer. Never combine several people into one name.
+- Search the entire narrative—not only a Crew heading—for actual human names associated with crew roles, and return each person separately in crewMembers. Use role descriptions to select Primary care, Driver, Attendant, or Observer. Examples: "Jones attended/was lead medic" means Primary care; "Smith drove/operator" means Driver; "Brown rode in back/assisted with care" means Attendant; "student Lee/ride-along" means Observer. "Post 53", "Station 2", "Medic 7", "Unit 53", "Ambulance 4", an ED room, and a hospital bed are not people and must never appear in crewMembers. If no human crew name is stated, return an empty array rather than converting an operational identifier into a person.
 - Default pregnancy to "No" and alcoholDrugs to "None suspected" when the notes do not mention them. These are demo assumptions and should not generate follow-up questions.
 - Infer compatible operational selections from the final outcome: patient details or documented assessment implies unitDisposition "Patient contact"; explicit no contact/no patient implies "No patient contact"; this unit transporting implies careDisposition "Transport by this unit", crewDisposition "Transported patient", and transportDisposition "Transported by EMS"; refusal implies careDisposition "Refused care" and transportDisposition "Not transported"; transport by another or air unit implies careDisposition "Transport by another unit" and crewDisposition "Assisted other unit". Infer transportedTo from the facility type named in the notes.
 - Always look for the responding or transporting EMS unit, including compact forms such as M2, Medic-2, Amb 4, A4, unit #53, Rescue 1, E3, and SQ5. Normalize these to readable names. Do not use an ED room, hospital unit, bed number, or crew member number as the EMS unit.
@@ -179,6 +179,14 @@ function destinationType(chart, text) {
   return chart.destination ? 'Other' : '';
 }
 
+function isLikelyCrewPerson(name) {
+  const value = String(name || '').trim();
+  if (!value || !/[A-Za-z]/.test(value)) return false;
+  if (/^(?:post|station|base|unit|medic|ambulance|amb|rescue|engine|squad|truck|apparatus|vehicle|room|bed|ed|hospital)\s*(?:no\.?|number|#)?\s*[-#:]?\s*[A-Z]?\d+[A-Z]?$/i.test(value)) return false;
+  if (/^(?:post|station|base|unit|apparatus|vehicle)\b/i.test(value)) return false;
+  return true;
+}
+
 function applyOperationalSelections(chart, sourceText) {
   const noContact = /\b(?:no patient contact|without patient contact|unable to locate (?:the )?patient|no patient (?:found|located))\b/i.test(sourceText);
   const cancelledEnRoute = /\b(?:cancell?ed|disregarded)\b[\s\S]{0,40}\b(?:en route|before arrival|prior to arrival)\b|\b(?:en route|before arrival|prior to arrival)\b[\s\S]{0,40}\b(?:cancell?ed|disregarded)\b/i.test(sourceText);
@@ -225,12 +233,13 @@ function normalizeExtraction(result, sourceText) {
   chart.crewMembers = (Array.isArray(chart.crewMembers) ? chart.crewMembers : [])
     .map((member) => ({ name: String(member?.name || '').trim(), role: String(member?.role || '').trim(), certificationLevel: String(member?.certificationLevel || '').trim() }))
     .map((member) => ({ ...member, name: member.certificationLevel ? member.name.replace(/^(?:EMT|AEMT|Paramedic|RN)\s+/i, '') : member.name }))
-    .filter((member) => member.name);
-  if (chart.crewMembers.length) chart.crew = chart.crewMembers.map((member) => `${member.name}${member.role ? ` — ${member.role}` : ''}`).join('; ');
+    .filter((member) => isLikelyCrewPerson(member.name));
+  chart.crew = chart.crewMembers.length ? chart.crewMembers.map((member) => `${member.name}${member.role ? ` — ${member.role}` : ''}`).join('; ') : '';
   applyOperationalSelections(chart, sourceText);
   result.missingQuestions = (result.missingQuestions || []).filter(({ key }) => !optionalFieldKeys.has(key));
   if (chart.disposition && chart.disposition !== 'Transported') result.missingQuestions = result.missingQuestions.filter(({ key }) => !['destination', 'transportMode', 'condition', 'careTransferTime'].includes(key));
   result.missingQuestions = result.missingQuestions.filter(({ key }) => !String(chart[key] || '').trim());
+  if (!chart.crew && !result.missingQuestions.some(({ key }) => key === 'crew')) result.missingQuestions.push({ key: 'crew', question: 'What are the names and roles of the human crew members documented for this call?' });
   result.chart = chart;
   return result;
 }
