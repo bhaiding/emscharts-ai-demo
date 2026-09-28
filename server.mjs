@@ -13,11 +13,12 @@ const fieldKeys = [
   'name', 'age', 'sex', 'dob', 'weight', 'patientAddress', 'patientCity',
   'patientState', 'patientZip', 'address', 'city', 'unit',
   'complaint', 'onset', 'distress', 'medicalTrauma', 'allergies',
-  'medications', 'history', 'lastIntake', 'alcoholDrugs', 'disposition',
-  'destination', 'transportMode', 'condition', 'dispatchTime',
+  'medications', 'history', 'lastIntake', 'alcoholDrugs', 'pregnancy',
+  'disposition', 'unitDisposition', 'careDisposition', 'crewDisposition',
+  'transportDisposition', 'transportedTo', 'destination', 'transportMode', 'condition', 'dispatchTime',
   'careTransferTime', 'crew', 'narrative',
 ];
-const optionalFieldKeys = new Set(['weight', 'patientAddress', 'patientCity', 'patientState', 'patientZip', 'history', 'lastIntake', 'alcoholDrugs']);
+const optionalFieldKeys = new Set(['weight', 'patientAddress', 'patientCity', 'patientState', 'patientZip', 'history', 'lastIntake', 'alcoholDrugs', 'pregnancy', 'unitDisposition', 'careDisposition', 'crewDisposition', 'transportDisposition', 'transportedTo']);
 
 const chartProperties = Object.fromEntries(fieldKeys.map((key) => [key, {
   type: 'string',
@@ -28,12 +29,24 @@ chartProperties.medicalTrauma = {
   enum: ['', 'Medical', 'Trauma', 'Medical and trauma'],
   description: 'Required classification inferred from the chief complaint and mechanism. Chest pain, dyspnea, illness, syncope, and similar non-injury complaints are Medical. Falls, collisions, wounds, fractures, and other injuries are Trauma. Use Medical and trauma when both are present.',
 };
+chartProperties.sex = {
+  type: 'string',
+  enum: ['', 'Female', 'Male', 'Unknown'],
+  description: 'Required patient sex. Normalize Sex: F, F, female, and woman to Female; normalize Sex: M, M, male, and man to Male. Use Unknown only when the notes explicitly say unknown. Do not confuse unit shorthand such as M2 with patient sex.',
+};
 chartProperties.unit.description = 'Responding or transporting EMS unit identifier. Extract common forms including Medic 2, Medic-2, M2, Ambulance 4, Amb 4, A4, Rescue 1, Engine 3, Squad 5, and unit #53. Normalize unambiguous abbreviations: M2 to Medic 2, Amb 4 or A4 to Ambulance 4, R1 to Rescue 1, E3 to Engine 3, and SQ5 to Squad 5. Do not confuse a room, bed, destination unit, or crew number with the EMS unit.';
 chartProperties.disposition = {
   type: 'string',
   enum: ['', 'Transported', 'Patient refused care', 'Treated and released', 'Cancelled', 'Deceased', 'No patient found', 'Transferred to another unit'],
   description: 'Final patient disposition. Normalize transported/conveyed/taken to a facility as Transported; refused or declined care/transport, AMA, or signed refusal as Patient refused care; treated and left at scene as Treated and released; cancelled/disregarded calls as Cancelled; pronounced dead or DOA as Deceased; no patient located as No patient found; and transport by another EMS unit as Transferred to another unit.',
 };
+chartProperties.alcoholDrugs = { type: 'string', enum: ['None suspected', 'Alcohol suspected', 'Drugs suspected', 'Unknown'], description: 'Alcohol or drug involvement. Select Alcohol suspected or Drugs suspected when supported, Unknown when explicitly unknown, and otherwise default to None suspected.' };
+chartProperties.pregnancy = { type: 'string', enum: ['No', 'Yes', 'Possible', 'Not applicable', 'Unknown'], description: 'Pregnancy status. Use Yes, Possible, Not applicable, or Unknown when explicitly supported; otherwise default to No.' };
+chartProperties.unitDisposition = { type: 'string', enum: ['', 'Patient contact', 'No patient contact', 'Cancelled en route'], description: 'Whether this unit made patient contact. Infer Patient contact when patient demographics, assessment, care, refusal, or transport are documented; No patient contact when explicitly stated or no patient was found; Cancelled en route when cancelled before arrival.' };
+chartProperties.careDisposition = { type: 'string', enum: ['', 'Transport by this unit', 'Transport by another unit', 'Refused care'], description: 'Disposition of care. Transport by this unit when this crew transported; Transport by another unit when another ground or air unit transported; Refused care when the patient refused.' };
+chartProperties.crewDisposition = { type: 'string', enum: ['', 'Transported patient', 'Assisted other unit', 'Released at scene'], description: 'Crew outcome. Transported patient when this crew transported, Assisted other unit when care or transport was handled by another unit, and Released at scene for refusal, treatment/release, deceased, cancelled, or other non-transport outcomes.' };
+chartProperties.transportDisposition = { type: 'string', enum: ['', 'Transported by EMS', 'Not transported', 'Air medical'], description: 'Transport outcome. Use Air medical for helicopter/air transport, Transported by EMS for ground EMS transport, and Not transported for refusal, release, deceased, cancelled, or no-patient calls.' };
+chartProperties.transportedTo = { type: 'string', enum: ['', 'Hospital', 'Trauma center', 'Urgent care', 'Other'], description: 'Destination facility category. Infer Hospital from hospital, medical center, emergency department, or ED; Trauma center from trauma center; Urgent care from urgent care; and Other for another stated destination type.' };
 chartProperties.patientAddress.description = 'Patient home, residence, or mailing street address from a demographics, patient information, residence, or home-address section. Do not put the incident location here unless the notes explicitly say the scene was the patient home.';
 chartProperties.patientCity.description = 'City belonging to the patient home/residence address. Do not use the scene or destination city unless explicitly identified as the patient residence.';
 chartProperties.patientState.description = 'State belonging to the patient home/residence address.';
@@ -43,14 +56,30 @@ chartProperties.city.description = 'Scene city derived only from the scene/incid
 chartProperties.allergies.description = 'Reported allergies. Explicit negatives such as no allergies or NKDA must be returned as No known allergies.';
 chartProperties.medications.description = 'Reported medications. Explicit negatives such as takes no medications must be returned as No medications reported.';
 chartProperties.narrative.description = 'Newly synthesized chronological third-person EMS narrative using only supported facts; never copy rough source wording verbatim.';
+chartProperties.crew.description = 'Readable crew summary. Keep members separate and do not merge their names or roles. This value will be normalized from crewMembers.';
+
+const crewMembersProperty = {
+  type: 'array',
+  description: 'Every documented crew member as a separate array item. Never combine multiple people in one item.',
+  items: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'One crew member name or identifier without repeating a certification prefix that belongs in certificationLevel.' },
+      role: { type: 'string', enum: ['', 'Primary care', 'Driver', 'Attendant', 'Observer'], description: 'Primary care for the lead clinician/attending provider; Driver for the vehicle operator; Attendant for a second caregiver or person riding with the patient; Observer for a student or ride-along.' },
+      certificationLevel: { type: 'string', enum: ['', 'EMT', 'AEMT', 'Paramedic', 'RN', 'Other'], description: 'Certification only when stated or unambiguously included with the member.' },
+    },
+    required: ['name', 'role', 'certificationLevel'],
+    additionalProperties: false,
+  },
+};
 
 const extractionSchema = {
   type: 'object',
   properties: {
     chart: {
       type: 'object',
-      properties: chartProperties,
-      required: fieldKeys,
+      properties: { ...chartProperties, crewMembers: crewMembersProperty },
+      required: [...fieldKeys, 'crewMembers'],
       additionalProperties: false,
     },
     evidence: {
@@ -88,10 +117,14 @@ const systemInstructions = `You are an EMS chart abstraction assistant. Extract 
 Rules:
 - Never invent patient facts, treatments, vital signs, times, personnel, or outcomes.
 - Preserve explicit negative findings as chartable values. Examples: "no allergies" becomes "No known allergies"; "takes no medications" becomes "No medications reported".
+- Patient sex is required. Recognize compact demographic forms such as "Sex: M", "Sex=M", "M", "Sex: F", and "Sex=F" when they clearly label patient sex, and normalize to Male or Female.
 - Infer medicalTrauma from the chief complaint and mechanism. Chest pain/pressure, dyspnea, syncope, abdominal pain, altered mental status, and other non-injury complaints must be Medical. Falls, collisions, lacerations, fractures, assaults, and other injury mechanisms must be Trauma. Use Medical and trauma when both are present. Use an empty string only when neither the complaint nor mechanism supports a classification.
 - Extract scene city from the location/address context, not from a destination hospital name.
 - Treat document section labels and nearby headings as evidence. An address in Demographics, Patient Information, Residence, Home Address, or Mailing Address belongs in patientAddress/patientCity/patientState/patientZip. An address in Scene, Incident, Dispatch, Response Location, or Call Location belongs in address/city. Never copy a demographics address into the scene fields. Populate both only when the notes explicitly establish that the incident occurred at the patient's residence.
 - Attempt every supported field, including optional fields. Optional does not mean ignore it: extract weight, patient residence information, medical history, last oral intake, and alcohol/drug information whenever supported. Leave an optional field empty when absent and never ask a follow-up question for it.
+- Return each crew member separately in crewMembers. Use role descriptions to select Primary care, Driver, Attendant, or Observer. Examples: "Jones attended/was lead medic" means Primary care; "Smith drove/operator" means Driver; "Brown rode in back/assisted with care" means Attendant; "student Lee/ride-along" means Observer. Never combine several people into one name.
+- Default pregnancy to "No" and alcoholDrugs to "None suspected" when the notes do not mention them. These are demo assumptions and should not generate follow-up questions.
+- Infer compatible operational selections from the final outcome: patient details or documented assessment implies unitDisposition "Patient contact"; explicit no contact/no patient implies "No patient contact"; this unit transporting implies careDisposition "Transport by this unit", crewDisposition "Transported patient", and transportDisposition "Transported by EMS"; refusal implies careDisposition "Refused care" and transportDisposition "Not transported"; transport by another or air unit implies careDisposition "Transport by another unit" and crewDisposition "Assisted other unit". Infer transportedTo from the facility type named in the notes.
 - Always look for the responding or transporting EMS unit, including compact forms such as M2, Medic-2, Amb 4, A4, unit #53, Rescue 1, E3, and SQ5. Normalize these to readable names. Do not use an ED room, hospital unit, bed number, or crew member number as the EMS unit.
 - Always determine final disposition from the complete call outcome. Map transported/conveyed/taken to a facility to "Transported"; refused or declined care/transport, AMA, RMA, or signed refusal to "Patient refused care"; treated and released at scene to "Treated and released"; cancelled/disregarded to "Cancelled"; pronounced dead/DOA to "Deceased"; no patient found/unable to locate to "No patient found"; and transport by another EMS unit to "Transferred to another unit". A recommendation to transport is not proof that transport occurred.
 - Use empty strings for information that is not present and cannot be safely inferred.
@@ -99,7 +132,7 @@ Rules:
 - The narrative must always be newly synthesized as concise, chronological, third-person EMS documentation rather than copied verbatim. Use complete sentences, resolve fragments and repeated wording, and improve clinical clarity. Include only supported facts. Do not claim assessments, interventions, or responses that were not supplied. In context, "tx" may mean transport; never turn it into treatment unless an actual intervention is named.
 - Evidence should quote or closely paraphrase the shortest source phrase supporting each non-empty field. Mark inferred classifications medium confidence.
 - Ask one concise question for every missing field that is required to complete a typical patient care record. Do not ask for a field already resolved by an explicit negative statement. When disposition is not Transported, do not ask for destination, transport mode, condition at destination, or care-transfer time.
-- Optional fields in this application are weight, patient residence address/city/state/ZIP, medical history, last oral intake, and alcohol/drug information. Extract them when present, but never include them in missingQuestions.`;
+- Optional fields in this application are weight, patient residence address/city/state/ZIP, medical history, last oral intake, pregnancy, alcohol/drug information, and the detailed disposition selections. Extract or infer them when possible, but never include them in missingQuestions.`;
 
 function normalizedUnit(type, identifier) {
   const labels = { medic: 'Medic', m: 'Medic', ambulance: 'Ambulance', amb: 'Ambulance', a: 'Ambulance', rescue: 'Rescue', r: 'Rescue', engine: 'Engine', e: 'Engine', squad: 'Squad', sq: 'Squad' };
@@ -132,14 +165,72 @@ function dispositionFromNotes(text) {
   return matches.sort((a, b) => b.index - a.index || a.priority - b.priority)[0]?.value || '';
 }
 
+function sexFromNotes(text) {
+  const explicit = text.match(/\b(?:patient\s+)?sex\s*[:=\-]\s*(female|male|f|m)\b/i);
+  if (!explicit) return '';
+  return /^f/i.test(explicit[1]) ? 'Female' : 'Male';
+}
+
+function destinationType(chart, text) {
+  const value = `${chart.destination || ''} ${text}`;
+  if (/\btrauma (?:center|centre)\b/i.test(value)) return 'Trauma center';
+  if (/\burgent care\b/i.test(value)) return 'Urgent care';
+  if (/\b(?:hospital|medical cent(?:er|re)|emergency department|ED)\b/i.test(value)) return 'Hospital';
+  return chart.destination ? 'Other' : '';
+}
+
+function applyOperationalSelections(chart, sourceText) {
+  const noContact = /\b(?:no patient contact|without patient contact|unable to locate (?:the )?patient|no patient (?:found|located))\b/i.test(sourceText);
+  const cancelledEnRoute = /\b(?:cancell?ed|disregarded)\b[\s\S]{0,40}\b(?:en route|before arrival|prior to arrival)\b|\b(?:en route|before arrival|prior to arrival)\b[\s\S]{0,40}\b(?:cancell?ed|disregarded)\b/i.test(sourceText);
+  const patientDetails = ['name', 'age', 'sex', 'complaint', 'allergies', 'medications'].some((key) => String(chart[key] || '').trim());
+  if (/\b(?:transported|conveyed|transport)\b[\s\S]{0,40}\bnon[- ]?emergent\b|\bnon[- ]?emergent\b[\s\S]{0,40}\b(?:transported|conveyed|transport)\b/i.test(sourceText)) chart.transportMode = 'Non-emergent';
+  else if (/\b(?:transported|conveyed|transport)\b[\s\S]{0,40}\bemergent\b|\bemergent\b[\s\S]{0,40}\b(?:transported|conveyed|transport)\b/i.test(sourceText)) chart.transportMode = 'Emergent';
+  if (cancelledEnRoute) chart.unitDisposition = 'Cancelled en route';
+  else if (noContact || chart.disposition === 'No patient found') chart.unitDisposition = 'No patient contact';
+  else if (patientDetails || ['Transported', 'Patient refused care', 'Treated and released', 'Deceased', 'Transferred to another unit'].includes(chart.disposition)) chart.unitDisposition = 'Patient contact';
+
+  const airTransport = /\b(?:air medical|medical helicopter|helicopter|flight crew|lifeline|medevac)\b/i.test(sourceText);
+  if (chart.disposition === 'Transported') {
+    chart.careDisposition = airTransport ? 'Transport by another unit' : 'Transport by this unit';
+    chart.crewDisposition = airTransport ? 'Assisted other unit' : 'Transported patient';
+    chart.transportDisposition = airTransport ? 'Air medical' : 'Transported by EMS';
+    chart.transportedTo = chart.transportedTo || destinationType(chart, sourceText);
+  } else if (chart.disposition === 'Transferred to another unit') {
+    chart.careDisposition = 'Transport by another unit';
+    chart.crewDisposition = 'Assisted other unit';
+    chart.transportDisposition = airTransport ? 'Air medical' : 'Transported by EMS';
+    chart.transportedTo = chart.transportedTo || destinationType(chart, sourceText);
+  } else if (chart.disposition === 'Patient refused care') {
+    chart.careDisposition = 'Refused care';
+    chart.crewDisposition = 'Released at scene';
+    chart.transportDisposition = 'Not transported';
+    chart.transportMode = 'No transport';
+  } else if (['Treated and released', 'Cancelled', 'Deceased', 'No patient found'].includes(chart.disposition)) {
+    chart.crewDisposition = chart.disposition === 'Cancelled' && cancelledEnRoute ? '' : 'Released at scene';
+    chart.transportDisposition = 'Not transported';
+    chart.transportMode = 'No transport';
+  }
+}
+
 function normalizeExtraction(result, sourceText) {
   const chart = result.chart || {};
+  const explicitSex = sexFromNotes(sourceText);
+  if (explicitSex) chart.sex = explicitSex;
   const sourceUnit = unitFromNotes(sourceText);
   if (sourceUnit) chart.unit = sourceUnit;
   const sourceDisposition = dispositionFromNotes(sourceText);
   if (sourceDisposition) chart.disposition = sourceDisposition;
+  chart.pregnancy = chart.pregnancy || 'No';
+  chart.alcoholDrugs = chart.alcoholDrugs || 'None suspected';
+  chart.crewMembers = (Array.isArray(chart.crewMembers) ? chart.crewMembers : [])
+    .map((member) => ({ name: String(member?.name || '').trim(), role: String(member?.role || '').trim(), certificationLevel: String(member?.certificationLevel || '').trim() }))
+    .map((member) => ({ ...member, name: member.certificationLevel ? member.name.replace(/^(?:EMT|AEMT|Paramedic|RN)\s+/i, '') : member.name }))
+    .filter((member) => member.name);
+  if (chart.crewMembers.length) chart.crew = chart.crewMembers.map((member) => `${member.name}${member.role ? ` — ${member.role}` : ''}`).join('; ');
+  applyOperationalSelections(chart, sourceText);
   result.missingQuestions = (result.missingQuestions || []).filter(({ key }) => !optionalFieldKeys.has(key));
   if (chart.disposition && chart.disposition !== 'Transported') result.missingQuestions = result.missingQuestions.filter(({ key }) => !['destination', 'transportMode', 'condition', 'careTransferTime'].includes(key));
+  result.missingQuestions = result.missingQuestions.filter(({ key }) => !String(chart[key] || '').trim());
   result.chart = chart;
   return result;
 }
