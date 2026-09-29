@@ -1,0 +1,53 @@
+Image transcription (John_Smith_Medications_and_History.png):
+Medication & Medical History
+FICTIONAL PATIENT RECORD | EMS PRODUCT DEMO
+
+Patient: John Smith          DOB: May 13, 1976
+Sex: Male | Age: 50      Record date: September 29, 2026
+Address: 123 Corby Blvd, Notre Dame, IN 46556     Demo ID: DEMO-0053
+
+CURRENT HOME MEDICATIONS
+Warfarin          5 mg by mouth each evening      Atrial fibrillation
+Carvedilol        12.5 mg by mouth twice daily    Heart failure / blood pressure
+Lisinopril         10 mg by mouth once daily      Heart failure / blood pressure
+Furosemide        40 mg by mouth each morning     Fluid retention
+Spironolactone    25 mg by mouth once daily       Heart failure
+Atorvastatin      40 mg by mouth each evening     High cholesterol / prior MI
+
+ALLERGIES
+Penicillin: itchy rash in childhood. No other medication allergies reported.
+
+PAST MEDICAL & SURGICAL HISTORY
+Congestive heart failure — diagnosed in 2021; reduced ejection fraction, most recently 35%.
+Prior myocardial infarction — heart attack in 2020; coronary stent placed during that admission.
+Paroxysmal atrial fibrillation — diagnosed in 2022; takes warfarin for anticoagulation.
+Hypertension / hyperlipidemia — longstanding; managed with home medications listed above.
+
+BASELINE & SOCIAL HISTORY
+Lives with spouse; independent in daily activities. Former smoker, quit in 2020. Occasional alcohol use; no recreational drug use reported.
+
+Image transcription (Call_Notes-1.png):
+Vital Information
+Demographics
+Name: John Smith
+Sex: M  DOB: 5-13-76  Age: 50
+Address: 123 Corby Blvd
+State: IN  City: Notre Dame  Zip: 46556
+Medications
+- Warfarin
+History
+- Congestive Heart Failure
+- Heart Attack
+Incident Notes
+- Pt experiencing chest pain since dinner at 8pm
+- Similar to before his last heart attack
+Vitals
+Time       HR   SaO2  BP       Pain
+9:02 PM    72   99    112/74   6/10
+9:17 PM    76   98    108/70   5/10
+Glucose: 120  AxO: 4
+
+Voice recorded hospital patch:
+Receiving hospital, this is Medic 53, en route with a 50-year-old male complaining of chest pain beginning around 8:00 p.m. while eating dinner. He describes constant substernal pressure radiating to his left arm, accompanied by mild nausea and sweating. Pain was initially six out of ten and is currently five out of ten. He reports that this feels similar to his previous heart attack. Relevant history includes prior myocardial infarction and congestive heart failure, and he takes warfarin. He denies shortness of breath, loss of consciousness, recent trauma, or vomiting.
+
+Patient is alert and oriented times four, speaking in complete sentences, with unlabored breathing. Skin is mildly pale and diaphoretic, and lung sounds are clear bilaterally. Initial vitals at 9:02 p.m. were heart rate 72, blood pressure 112 over 74, oxygen saturation 99 percent on room air, respiratory rate 18, and blood glucose 120. Repeat vitals at 9:17 p.m. are heart rate 76, blood pressure 108 over 70, oxygen saturation 98 percent on room air, and pain five out of ten. Patient is positioned comfortably on the stretcher and is being reassessed during transport. No medications have been administered by our crew. Estimated arrival is eight minutes.
