@@ -40,31 +40,7 @@ The two browser pages share chart data using `localStorage`. The AI page sends n
 
 The public demo includes a basic per-IP request limit. A production implementation would also require authentication, durable rate limiting, audit logging, access controls, encryption policies, clinical validation, and organization-specific ePCR integrations.
 
-## Run locally
 
-Use Node.js 22 or newer:
-
-```bash
-OPENAI_API_KEY=your_key_here node server.mjs
-```
-
-Then open:
-
-- `http://127.0.0.1:8765/ems-ai-assistant.html`
-- `http://127.0.0.1:8765/ems-chart.html`
-
-## Deploy your own copy
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/bhaiding/emscharts-ai-demo)
-
-The included `render.yaml` creates the web service and prompts for `OPENAI_API_KEY` as a secret environment variable.
-
-Docker is also supported:
-
-```bash
-docker build -t ems-ai-demo .
-docker run --rm -p 8765:8765 -e OPENAI_API_KEY=your_key_here ems-ai-demo
-```
 
 ## Clinical and privacy notice
 
