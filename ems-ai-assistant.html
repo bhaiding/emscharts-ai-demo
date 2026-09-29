@@ -224,15 +224,16 @@
       document.querySelector('#questions').innerHTML=missing.map((key,i)=>{const f=schema.find(x=>x.key===key),q=questionConfig[key]||{question:`Please provide: ${f.label}`,placeholder:'Enter missing information'},question=modelQuestions[key]||q.question;return `<div class="question"><div class="question-top"><span class="qnum">${i+1}</span><label for="q-${key}">${escapeHtml(question)}</label></div><input id="q-${key}" data-key="${key}" type="${q.type||'text'}" placeholder="${escapeHtml(q.placeholder||'')}"></div>`}).join('');
       document.querySelectorAll('.question input').forEach(i=>i.addEventListener('input',()=>{chart[i.dataset.key]=i.value.trim();delete chart.submittedAt;persistChart();updateAnswered()}));updateAnswered();
     }
-    function updateAnswered(){const inputs=[...document.querySelectorAll('.question input')],answered=inputs.filter(i=>i.value.trim()).length;document.querySelector('#answeredCount').textContent=`${answered} of ${inputs.length} questions answered`;document.querySelector('#applyAnswers').disabled=answered<inputs.length;document.querySelector('#completeBanner').style.display=inputs.length&&answered===inputs.length?'block':'none'}
+    function updateAnswered(){const inputs=[...document.querySelectorAll('.question input')],answered=inputs.filter(i=>i.value.trim()).length,button=document.querySelector('#applyAnswers');document.querySelector('#answeredCount').textContent=`${answered} of ${inputs.length} questions answered`;button.disabled=answered===0;button.textContent=answered===inputs.length?'Apply answers & review chart':`Apply ${answered} answered field${answered===1?'':'s'}`;document.querySelector('#completeBanner').style.display=inputs.length&&answered===inputs.length?'block':'none'}
     async function applyAnswers(){
-      document.querySelectorAll('.question input').forEach(i=>{if(i.value.trim())chart[i.dataset.key]=i.value.trim()});
+      const answered=[...document.querySelectorAll('.question input')].filter(i=>i.value.trim());
+      answered.forEach(i=>{chart[i.dataset.key]=i.value.trim()});
       missing=requiredFields(chart).filter(f=>!String(chart[f.key]||'').trim()).map(f=>f.key);persistChart();
       const requiredTotal=requiredFields(chart).length,complete=Math.round(((requiredTotal-missing.length)/requiredTotal)*100);document.querySelector('#missingCount').textContent=missing.length;document.querySelector('#percent').textContent=complete+'%';document.querySelector('#progressBar').style.width=complete+'%';
       const button=document.querySelector('#applyAnswers');button.disabled=true;button.textContent='Rewriting narrative…';
-      try{const response=await fetch('/api/rewrite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceText:source.value,chart})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Narrative rewrite failed.');chart.narrative=payload.narrative;persistChart();showToast('Answers and narrative added to the chart.');openChartPage();}
-      catch(error){showToast(error.message||'Answers saved, but narrative rewrite failed.');openChartPage()}
-      finally{button.textContent='Apply answers & review chart';updateAnswered()}
+      try{const response=await fetch('/api/rewrite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceText:source.value,chart})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Narrative rewrite failed.');chart.narrative=payload.narrative;persistChart();showToast(missing.length?`${answered.length} answer${answered.length===1?'':'s'} saved. Remaining questions refreshed.`:'Answers and narrative added to the chart.');}
+      catch(error){showToast(error.message||'Answers saved, but narrative rewrite failed.')}
+      finally{if(missing.length)renderResults();else openChartPage();updateAnswered()}
     }
     function renderChart(){
       const groups=['Patient','Assessment','History','Incident','Destination','Times','Crew','Narrative'];
