@@ -18,6 +18,7 @@ The Render free service may take several seconds to wake up after a period of in
 - Extracts demographics, incident details, chief complaint, history, disposition, destination, operational times, and crew information from free text.
 - Keeps separately labeled note images, call notes, and hospital patches as distinct sources so evidence provenance and context survive extraction.
 - Captures repeat vital signs as structured observations and keeps pain scores separate from the clinician's overall distress assessment.
+- Normalizes completed-call language such as medium distress, lights-and-sirens transport, and destination handoff times into the chart's controlled options.
 - Aggregates complete medication and medical/surgical history lists across every supplied source instead of allowing a shorter call note to replace a more detailed history sheet.
 - Normalizes common unit shorthand such as `M2`, `Amb 4`, and `unit #53`, and maps final outcomes to chart-compatible dispositions including transported, refused care, deceased, cancelled, and no patient found.
 - Separates patient residence information from the scene address using demographics and incident-section context, while still extracting optional information whenever it is available.
