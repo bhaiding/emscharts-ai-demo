@@ -39,6 +39,8 @@ chartProperties.sex = {
 chartProperties.distress = { type: 'string', enum: ['', 'None', 'Mild', 'Moderate', 'Severe'], description: 'Overall patient distress only when explicitly described as none, mild, moderate, or severe distress. A numeric pain score is not a distress level and must not populate this field.' };
 chartProperties.initialPainScore.description = 'First explicitly documented pain score, such as 6/10. Do not convert it to a distress level.';
 chartProperties.currentPainScore.description = 'Most recent explicitly documented pain score, such as 5/10. Do not convert it to a distress level.';
+chartProperties.transportMode = { type: 'string', enum: ['', 'Emergent', 'Non-emergent', 'No transport'], description: 'Transport response mode. Normalize lights and sirens, emergency traffic, or Code 3 to Emergent; normalize no/without lights and sirens or non-emergent transport to Non-emergent; use No transport only for a documented non-transport outcome.' };
+chartProperties.careTransferTime.description = 'Time care was handed off or transferred at the destination. Recognize phrases such as care handed off at 9:30 PM and normalize to HH:MM.';
 chartProperties.unit.description = 'Responding or transporting EMS unit identifier. Extract common forms including Medic 2, Medic-2, M2, Ambulance 4, Amb 4, A4, Rescue 1, Engine 3, Squad 5, and unit #53. Normalize unambiguous abbreviations: M2 to Medic 2, Amb 4 or A4 to Ambulance 4, R1 to Rescue 1, E3 to Engine 3, and SQ5 to Squad 5. Do not confuse a room, bed, destination unit, or crew number with the EMS unit.';
 chartProperties.disposition = {
   type: 'string',
@@ -177,18 +179,19 @@ Rules:
 - The input contains separately labeled source documents. Use the source label in every evidence item. A medication/history sheet is authoritative for its listed medications and history; call notes are authoritative for their written demographics and observations; a hospital patch describes status during transport but does not by itself prove arrival or completed transport. Treat facts in fictional demo documents as supplied evidence, but omit demo disclaimers and meta-commentary from the clinical narrative.
 - Aggregate rather than replace: extract every unique medication into medicationList and every unique medical/surgical history item into historyList across all sources. Preserve available dose, route, frequency, reason, dates, procedures, and ejection fraction. Also provide readable summary strings in medications and history.
 - Put every vital-sign observation into vitals. A time printed in a vitals row belongs to that observation and must never populate dispatchTime. Do not infer dispatch from the earliest timestamp; dispatch time requires explicit dispatch labeling.
-- A numeric pain score such as 5/10 is pain, not overall distress. Put it in the matching vital record and initialPainScore/currentPainScore. Populate distress only when a source explicitly describes none, mild, moderate, or severe distress.
+- A numeric pain score such as 5/10 is pain, not overall distress. Put it in the matching vital record and initialPainScore/currentPainScore. Populate distress only when a source explicitly describes none, mild, medium/moderate, or severe distress. Normalize "medium distress" to the form option "Moderate".
 - Attempt every supported field, including optional fields. Optional does not mean ignore it: extract weight, patient residence information, medical history, last oral intake, and alcohol/drug information whenever supported. Leave an optional field empty when absent and never ask a follow-up question for it.
 - Search the entire narrative—not only a Crew heading—for actual human names associated with crew roles, and return each person separately in crewMembers. Use role descriptions to select Primary care, Driver, Attendant, or Observer. Examples: "Jones attended/was lead medic" means Primary care; "Smith drove/operator" means Driver; "Brown rode in back/assisted with care" means Attendant; "student Lee/ride-along" means Observer. "Post 53", "Station 2", "Medic 7", "Unit 53", "Ambulance 4", an ED room, and a hospital bed are not people and must never appear in crewMembers. If no human crew name is stated, return an empty array rather than converting an operational identifier into a person.
 - For pregnancy, use Not applicable for a male patient under this form's configured rule; use Yes, Possible, or No only when supported; otherwise use Unknown. Default alcoholDrugs to "None suspected" when no involvement is stated. These fields should not generate follow-up questions.
 - Infer compatible operational selections from the final outcome: patient details or documented assessment implies unitDisposition "Patient contact"; explicit no contact/no patient implies "No patient contact"; this unit transporting implies careDisposition "Transport by this unit", crewDisposition "Transported patient", and transportDisposition "Transported by EMS"; refusal implies careDisposition "Refused care" and transportDisposition "Not transported"; transport by another or air unit implies careDisposition "Transport by another unit" and crewDisposition "Assisted other unit". Infer transportedTo from the facility type named in the notes.
 - Always look for the responding or transporting EMS unit, including compact forms such as M2, Medic-2, Amb 4, A4, unit #53, Rescue 1, E3, and SQ5. Normalize these to readable names. Do not use an ED room, hospital unit, bed number, or crew member number as the EMS unit.
-- Always determine final disposition from explicit completed-call evidence. Map transported/conveyed/taken to a facility to "Transported"; refused or declined care/transport, AMA, RMA, or signed refusal to "Patient refused care"; treated and released at scene to "Treated and released"; cancelled/disregarded to "Cancelled"; pronounced dead/DOA to "Deceased"; no patient found/unable to locate to "No patient found"; and transport by another EMS unit to "Transferred to another unit". "En route", "during transport", an ETA, a plan, or a hospital patch alone does not prove completed transport or arrival. Leave disposition empty and ask for the final outcome when no completed outcome is supplied.
+- Always determine final disposition from explicit completed-call evidence. Map transported/conveyed/taken to a facility to "Transported" even when mode words appear between the verb and destination, as in "transported lights and sirens to Memorial Hospital"; refused or declined care/transport, AMA, RMA, or signed refusal to "Patient refused care"; treated and released at scene to "Treated and released"; cancelled/disregarded to "Cancelled"; pronounced dead/DOA to "Deceased"; no patient found/unable to locate to "No patient found"; and transport by another EMS unit to "Transferred to another unit". A later completed-outcome statement overrides earlier "en route", "during transport", ETA, or plan wording. Leave disposition empty and ask for the final outcome only when no completed outcome is supplied.
+- Normalize transport mode from operational wording: "lights and sirens", "emergency traffic", or "Code 3" means Emergent; "without/no lights and sirens" or "non-emergent" means Non-emergent. Extract careTransferTime from care-transfer and handoff phrases such as "care was handed off at 9:30 PM". Do not infer condition at destination unless improved, unchanged, or worsened is explicitly tied to arrival or destination.
 - Use empty strings for information that is not present and cannot be safely inferred.
 - Times should be HH:MM when available. Dates should be YYYY-MM-DD when available.
 - The narrative must always be newly synthesized as concise, chronological, third-person EMS documentation rather than copied verbatim. Use complete sentences, resolve fragments and repeated wording, and improve clinical clarity. Include only supported facts. Do not claim assessments, interventions, or responses that were not supplied. In context, "tx" may mean transport; never turn it into treatment unless an actual intervention is named.
 - Evidence should quote or closely paraphrase the shortest source phrase supporting each non-empty field and identify its source label. Set status to explicit for directly stated facts, normalized for formatting changes, inferred for supported conclusions, defaulted for application defaults, conflict when sources disagree, and unknown when unresolved. Mark inferred/defaulted values medium or low confidence rather than presenting them as direct high-confidence facts.
-- Counterexamples: "Vitals at 9:02 PM" is not dispatch at 9:02 PM. "Pain 5/10" is not moderate distress. "Medic 53" is a unit, not a crew member. An address under Demographics is not a scene address. "En route with an ETA of eight minutes" is not completed transport or transfer of care.
+- Counterexamples: "Vitals at 9:02 PM" is not dispatch at 9:02 PM. "Pain 5/10" alone is not moderate distress, but "5/10 with medium distress" explicitly supports Moderate distress. "Medic 53" is a unit, not a crew member. An address under Demographics is not a scene address. "En route with an ETA of eight minutes" alone is not completed transport, while a later sentence saying the patient was transported to a named hospital is a completed outcome.
 - Ask one concise question for every missing field that is required to complete a typical patient care record. Do not ask for a field already resolved by an explicit negative statement. When disposition is not Transported, do not ask for destination, transport mode, condition at destination, or care-transfer time.
 - Optional fields in this application are weight, patient residence address/city/state/ZIP, medical history, last oral intake, pain scores, pregnancy, alcohol/drug information, and the detailed disposition selections. Extract or infer them when possible, but never include them in missingQuestions.`;
 
@@ -350,14 +353,26 @@ function hasExplicitDispatchTime(text) {
 }
 
 function explicitDistress(text) {
-  const match = text.match(/\b(no apparent|no acute|none|mild|moderate|severe)\s+(?:level of\s+)?distress\b/i);
+  const match = text.match(/\b(no apparent|no acute|none|mild|medium|moderate|severe)\s+(?:level of\s+)?distress\b/i);
   if (!match) return '';
   if (/^no|none/i.test(match[1])) return 'None';
+  if (/^medium$/i.test(match[1])) return 'Moderate';
   return match[1][0].toUpperCase() + match[1].slice(1).toLowerCase();
 }
 
 function hasCompletedOutcome(text) {
-  return /\b(?:patient (?:was )?)?(?:transported|conveyed|taken)\s+to\b|\barrived at\b|\bcare (?:was )?transferred\b|\b(?:refus(?:ed|al)|declined (?:care|transport)|treated and released|released at scene|pronounced (?:dead|deceased)|dead on arrival|no patient (?:found|located)|call cancell?ed|disregarded)\b/i.test(text);
+  return /\b(?:patient (?:was )?)?(?:transported|conveyed|taken)\b[\s\S]{0,80}\bto\b|\barrived at\b|\bcare (?:was )?(?:transferred|handed off)\b|\b(?:refus(?:ed|al)|declined (?:care|transport)|treated and released|released at scene|pronounced (?:dead|deceased)|dead on arrival|no patient (?:found|located)|call cancell?ed|disregarded)\b/i.test(text);
+}
+
+function careTransferTimeFromNotes(text) {
+  const match = text.match(/\b(?:care\s+(?:was\s+)?(?:transferred|handed off)|patient\s+(?:was\s+)?handed off|hand[- ]?off)\s*(?:occurred\s*)?(?:at|:|=|-)?\s*(\d{1,2}:\d{2}\s*(?:[ap]\.?m\.?)?)/i);
+  return match ? normalizeClockTime(match[1]) : '';
+}
+
+function conditionAtDestinationFromNotes(text) {
+  const match = text.match(/\b(?:at|on)\s+(?:the\s+)?(?:destination|hospital|facility|arrival)\b[\s\S]{0,60}\b(improved|unchanged|worsened)\b|\b(improved|unchanged|worsened)\b[\s\S]{0,60}\b(?:at|on)\s+(?:the\s+)?(?:destination|hospital|facility|arrival)\b/i);
+  const value = match?.[1] || match?.[2] || '';
+  return value ? value[0].toUpperCase() + value.slice(1).toLowerCase() : '';
 }
 
 function ensureQuestion(result, key, question) {
@@ -368,7 +383,8 @@ function applyOperationalSelections(chart, sourceText) {
   const noContact = /\b(?:no patient contact|without patient contact|unable to locate (?:the )?patient|no patient (?:found|located))\b/i.test(sourceText);
   const cancelledEnRoute = /\b(?:cancell?ed|disregarded)\b[\s\S]{0,40}\b(?:en route|before arrival|prior to arrival)\b|\b(?:en route|before arrival|prior to arrival)\b[\s\S]{0,40}\b(?:cancell?ed|disregarded)\b/i.test(sourceText);
   const patientDetails = ['name', 'age', 'sex', 'complaint', 'allergies', 'medications'].some((key) => String(chart[key] || '').trim());
-  if (/\b(?:transported|conveyed|transport)\b[\s\S]{0,40}\bnon[- ]?emergent\b|\bnon[- ]?emergent\b[\s\S]{0,40}\b(?:transported|conveyed|transport)\b/i.test(sourceText)) chart.transportMode = 'Non-emergent';
+  if (/\b(?:non[- ]?emergent|without\s+(?:lights?(?:\s+(?:and|or)\s+sirens?)?|sirens?)|no\s+(?:lights?(?:\s+(?:and|or)\s+sirens?)?|sirens?))\b/i.test(sourceText)) chart.transportMode = 'Non-emergent';
+  else if (/\b(?:lights?\s+(?:and|&|with)\s+sirens?|emergency traffic|code\s*3)\b/i.test(sourceText)) chart.transportMode = 'Emergent';
   else if (/\b(?:transported|conveyed|transport)\b[\s\S]{0,40}\bemergent\b|\bemergent\b[\s\S]{0,40}\b(?:transported|conveyed|transport)\b/i.test(sourceText)) chart.transportMode = 'Emergent';
   if (cancelledEnRoute) chart.unitDisposition = 'Cancelled en route';
   else if (noContact || chart.disposition === 'No patient found') chart.unitDisposition = 'No patient contact';
@@ -412,6 +428,8 @@ function normalizeExtraction(result, sourceText, sources = splitSourceDocuments(
   chart.alcoholDrugs = chart.alcoholDrugs || 'None suspected';
   chart.dispatchTime = hasExplicitDispatchTime(sourceText) ? chart.dispatchTime : '';
   chart.distress = explicitDistress(sourceText);
+  chart.careTransferTime = careTransferTimeFromNotes(sourceText) || chart.careTransferTime;
+  chart.condition = conditionAtDestinationFromNotes(sourceText);
   const sceneContext = /\b(?:scene|incident|dispatch|response|call)\s+(?:address|location|city)\b|\brespond(?:ed|ing)\s+to\b/i.test(sourceText);
   if (!sceneContext && cleanString(chart.address).toLowerCase() === cleanString(chart.patientAddress).toLowerCase()) chart.address = '';
   if (!sceneContext && cleanString(chart.city).toLowerCase() === cleanString(chart.patientCity).toLowerCase()) chart.city = '';
@@ -432,6 +450,10 @@ function normalizeExtraction(result, sourceText, sources = splitSourceDocuments(
   if (!chart.address) ensureQuestion(result, 'address', 'What was the scene or incident street address?');
   if (!chart.city) ensureQuestion(result, 'city', 'What was the scene city?');
   if (!chart.disposition) ensureQuestion(result, 'disposition', 'What was the final disposition after the call was completed?');
+  if (chart.disposition === 'Transported' && !chart.destination) ensureQuestion(result, 'destination', 'What was the receiving destination?');
+  if (chart.disposition === 'Transported' && !chart.transportMode) ensureQuestion(result, 'transportMode', 'Was transport emergent or non-emergent?');
+  if (chart.disposition === 'Transported' && !chart.condition) ensureQuestion(result, 'condition', 'Was the patient improved, unchanged, or worsened at the destination?');
+  if (chart.disposition === 'Transported' && !chart.careTransferTime) ensureQuestion(result, 'careTransferTime', 'What time was care transferred at the destination?');
   result.chart = chart;
   return result;
 }
